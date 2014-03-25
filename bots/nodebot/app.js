@@ -37,8 +37,39 @@ process.stdin.on( 'data', function ( data )
     console.log( JSON.stringify( moves ) );
 } );
 
+function getStringOfChars( sChar, iLength )
+{
+    var sStringOfChars = "";
+    while( iLength !== 0 )
+    {
+        sStringOfChars += sChar;
+        iLength--;
+    }
+    return sStringOfChars;
+}
+function logArena( gameState )
+{
+    var sGrid = gameState.grid;
+    var iNumberOfColumns = gameState.cols;
+
+    var sBorderUpperLeft = "+";//String.fromCharCode(201);
+    var sBorderUpperRight = "+";//String.fromCharCode(187);
+    var sBorderLowerLeft = "+";//String.fromCharCode(200);
+    var sBorderLowerRight = "+";//String.fromCharCode(188);
+    var sBorderHorizontal = getStringOfChars("-", iNumberOfColumns+2);//getStringOfChars ( String.fromCharCode(205), iNumberOfColumns +2 );
+    var sBorderVertical = "|"; //String.fromCharCode(186);
+    var sArena = "\n" + sBorderUpperLeft + sBorderHorizontal + sBorderUpperRight +"\n";
+    for( var i =0; sGrid.length>i; i = i + iNumberOfColumns )
+   {
+        sArena += sBorderVertical + " "+sGrid.substr( i, iNumberOfColumns ) + " "+  sBorderVertical +"\n";
+   }
+    sArena += sBorderLowerLeft + sBorderHorizontal +sBorderLowerRight + "\n";
+    console.log(sArena);
+}
 function getMoves( state, player )
 {
+
+    logArena( state );
     var energy;
     var spawn;
     var enemyenergy;
@@ -46,6 +77,9 @@ function getMoves( state, player )
     var playerIndices;
     var enemyIndices;
     var moves = [];
+    var spawnCoord;
+    var enemySpawnCoord;
+
     var collisionIndex = {};  // to:from;
 
     if( player === 'r' )
@@ -54,6 +88,8 @@ function getMoves( state, player )
         spawn = state.p1.spawn;
         enemyenergy = state.p2.energy;
         enemySpawn = state.p2.spawn;
+        spawnCoord = indexToCoord(state, spawn);
+        enemySpawnCoord = indexToCoord( state, enemySpawn);
         playerIndices = getAllIndices( state.grid, 'r' );
         enemyIndices = getAllIndices( state.grid, 'b' );
     }
@@ -63,6 +99,8 @@ function getMoves( state, player )
         spawn = state.p2.spawn;
         enemyenergy = state.p1.energy;
         enemySpawn = state.p1.spawn;
+        spawnCoord = indexToCoord(state, spawn);
+        enemySpawnCoord = indexToCoord(state, enemySpawn);
         playerIndices = getAllIndices( state.grid, 'b' );
         enemyIndices = getAllIndices( state.grid, 'r' );
     }
@@ -73,22 +111,127 @@ function getMoves( state, player )
         collisionIndex[ index ] = index;
     }
 
+    var aBots = [];
+    var oBots = {};
     playerIndices.forEach(
-            function ( playerIndex )
+            function ( botIndex )
             {
+                var friendlyBot = new Bot( botIndex );
+                aBots.push( friendlyBot );
+                oBots[ friendlyBot.name  ] = friendlyBot;
 
-                var adjacent = getAdjacentIndices( state, playerIndex );
-                var destination = getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, playerIndex, adjacent )
+
+            } );
+ playerIndices.forEach(
+            function ( botIndex )
+            {
+                var adjacent = getAdjacentIndices( state, botIndex );
+                var destination = getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, botIndex, adjacent )
                 if( !collisionIndex[ destination ] )  // space is NOT already occupied by moving bot or bot unable to move
-                {
-                    collisionIndex[ destination ] = playerIndex;  // report that you are moving to a destination is free of friendly bots,
-                    delete collisionIndex[ playerIndex ];  // report that you you are occupying your current position so you don't get run over
-                    moves.push( {from: playerIndex, to: destination} );  // move
+                {  // todo - this elsewhere
+                    collisionIndex[ destination ] = botIndex;  // report that you are moving to a destination is free of friendly bots,
+                    delete collisionIndex[ botIndex ];  // report that you you are occupying your current position so you don't get run over
+                    moves.push( {from: botIndex, to: destination} );  // move
                 }
             } );
 
     return moves;
+
+
+    function Bot( botIndex )
+    {
+        this.index = botIndex;
+        this.coords = this.coords || indexToCoord( state, this.index );
+        this.x = this.coords.x;
+        this.y = this.coords.y;
+        this.name = (this.name || "x" + this.x + "y" + this.y);
+        this.moveCoords = null;
+        this.moveIndex = null;
+        this.nearestFuel = null;
+        this.fuelDistances = this.fuelDistances || getFuelDistances( this );
+        this.ownSpawnDistance = this.ownSpawnDistance || getDistance( this.coords, spawnCoord );
+        this.enemySpawnDistance = this.enemySpawnDistance || getDistance( this.coords, enemySpawnCoord );
+       // this.nearestFriend;
+       // this.nearestEnemy;
+        this.strategy = "unassigned";
+        return this;
+    }
+
+
+    function getFuelDistances( oBot )
+    {
+        var aDistances = [];
+        var oDistances = [];
+        var aAllEnergy = getAllCoords( state, '*' );
+        var iClosestDistance = 1000000;
+        for( var i = 0; aAllEnergy.length > i; i++ )
+        {
+            var energyCoords = aAllEnergy[ i ];
+            var distance = getDistance( oBot.coords, energyCoords );
+            if( distance < iClosestDistance )
+            {
+                oBot.nearestFuel = energyCoords;
+            }
+            aDistances.push( distance );
+            if( !oDistances[ distance ] )
+            {
+                oDistances[ distance ];
+            }
+            oDistances[ distance ] = energyCoords;
+        }
+        return aDistances;
+    }
 }
+
+function getDistance( a, b )
+{
+    return ( Math.abs( b.x - a.x ) + Math.abs( b.y - a.y ) );
+}
+
+function getDistanceFromFuelToNearestBots()
+{
+    var aDistances = [];
+    var aAllEnergy = getAllCoords( state, '*' );
+    for( var i = 0; aAllEnergy.length > i; i++ )
+    {
+        var energyCoords = aAllEnergy[ i ];
+        var distance = getDistance( botCoords, energyCoords );
+        aDistances.push( distance );
+    }
+    return aDistances;
+
+    function getDistance( a, b )
+    {
+        return ( Math.abs( b.x - a.x ) + Math.abs( b.y - a.y ) );
+    }
+}
+
+function getRelativeStrength()
+{
+    return playerIndices.length - enemyIndices.length;
+}
+
+function mainLoop()
+{
+    var strength = getRelativeStrength();
+
+    if (strength > -1 )
+    {
+       // Offensive
+        getDistanceFromFuelToNearestBots();
+        cockBlock();
+        assignClosetBotsToGather();
+        spreadOutAndGather();
+        captureSpawnPoint();
+        defendSpawnPoint();
+        gangUpAndAttack();
+    }
+    else
+    {r
+       // Defensive
+    }
+}
+
 
 function getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, playerIndex, adjacent )
 {
@@ -104,44 +247,36 @@ function getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, en
         var energyCoords = indexToCoord( state, nearestEnergy );
         if( energyCoords.y > botCoords.y + 1 )
         {
-            console.log( "bot" + playerIndex + " moving up" );
             return to = coordToIndex( state, { x: botCoords.x, y: botCoords.y + 1} );
         }
         if( energyCoords.y < botCoords.y - 1 )
         {
-            console.log( "bot" + playerIndex + " moving down" );
             return to = coordToIndex( state, { x: botCoords.x, y: botCoords.y - 1} );
         }
         if( energyCoords.x > botCoords.x + 1 )
         {
-            console.log( "bot" + playerIndex + " moving right" );
             return to = coordToIndex( state, { x: botCoords.x + 1, y: botCoords.y} );
         }
         if( energyCoords.x < botCoords.x - 1 )
         {
-            console.log( "bot" + playerIndex + " moving left" );
             return to = coordToIndex( state, { x: botCoords.x - 1, y: botCoords.y} );
         }
 
         // just in case we're diagonal... get closer!
         if( energyCoords.y > botCoords.y )
         {
-            console.log( "bot" + playerIndex + " moving up" );
             return to = coordToIndex( state, { x: botCoords.x, y: botCoords.y + 1} );
         }
         if( energyCoords.y < botCoords.y )
         {
-            console.log( "bot" + playerIndex + " moving down" );
             return to = coordToIndex( state, { x: botCoords.x, y: botCoords.y - 1} );
         }
         if( energyCoords.x > botCoords.x )
         {
-            console.log( "bot" + playerIndex + " moving right" );
             return to = coordToIndex( state, { x: botCoords.x + 1, y: botCoords.y} );
         }
         if( energyCoords.x < botCoords.x )
         {
-            console.log( "bot" + playerIndex + " moving left" );
             return to = coordToIndex( state, { x: botCoords.x - 1, y: botCoords.y} );
         }
     }
