@@ -113,27 +113,125 @@ function getMoves( state, player )
 
     var aBots = [];
     var oBots = {};
+    var aFuel = [];
+    var oFuel = {};
+    var aAllEnergy = getAllIndices( state.grid, '*' );
+    console.log ("aAllEnergy" + aAllEnergy + "\n" + aAllEnergy.length);
+
     playerIndices.forEach(
-            function ( botIndex )
+            function initializeFriendlyBot( botIndex )
             {
                 var friendlyBot = new Bot( botIndex );
                 aBots.push( friendlyBot );
                 oBots[ friendlyBot.name  ] = friendlyBot;
+            }
+    );
+
+    aAllEnergy.forEach(
+        function initializeEnergy( fuelIndex )
+        {
+            var fuel = new Fuel( fuelIndex );
+            aFuel.push( fuel );
+            oFuel[ fuel.name  ] = fuel;
+        }
+    );
 
 
-            } );
- playerIndices.forEach(
-            function ( botIndex )
+    var strategy = "greedySearch";
+    if ( strategy === "greedySearch" )
+    {
+        /// define what tactics in what precedent make up this strategy
+        var iNumberOfBotsToAllocateToSearch = aAllEnergy.length;
+        console.log('do greedy stuff');
+        greedySearch( iNumberOfBotsToAllocateToSearch );          // not to be confused with cockBlock search in which we run a pair (at least) to the food near the enemy, but closer to both our bots, and wait for them to come to their death again, and again!!
+        console.log('do attacky stuff');
+        attackSpawnPoint();
+    }
+
+
+    function attackSpawnPoint()
+    {
+        var iAllocatedBots = 0;
+        aBots.forEach(
+            function allocateClosestBots( aBot )
             {
+                console.log("1.  strategy" + aBot.strategy);
+                if( aBot.strategy === "unassigned" )
+                {
+                    aBot.strategy = "spawnCamp";
+                    aBot.destinationCoords = enemySpawnCoord;
+                    moveTo( aBot, enemySpawnCoord );
+                }
+            }
+        )
+    }
+
+    function greedySearch( iMaxBots )
+    {
+        console.log("3 max" + iMaxBots);
+        // todo - don't forget to check and make sure this fuel is also the fuel nearest to this bot!! very important in the early game (last fuel in loop could direct only bot to it and might be far away!!)
+        var iAllocatedBots = 0;
+        aFuel.forEach(
+            function allocateClosestBots( oFuel )
+            {
+                console.log("max" + iMaxBots);
+                if( iMaxBots > iAllocatedBots )
+                {
+                    iAllocatedBots++;
+
+                    console.log("allocatedBots " + iAllocatedBots);
+                    console.log("oFuel.index " + oFuel.index);
+                    var oBot = oFuel.nearestFriendlyBot;
+                    oBot.strategy = "greedySearch";
+                    oBot.destinationCoords = oFuel.coords;
+                    moveTo(oBot , oFuel.coords, oFuel.destinationCoords );
+                }
+            }
+        )
+    }
+function moveTo( oBot, destinationCoords )
+{
+    // todo you just ripped out collision avoidance... put it back!!!!
+    var botIndex = oBot.index;
+    var destinationCoords = destinationCoords || oBot.destinationCoords;
+    var deltaX = oBot.x - destinationCoords.x;
+    var deltaY = oBot.y - destinationCoords.y;
+    var destination ={ x: oBot.x, y:oBot.y }; // go nowhere;
+    if( Math.abs( deltaX ) > Math.abs( deltaY ) )
+    {
+        var newX = oBot.x +1;
+        if( oBot.x > destinationCoords.x )
+        {
+             newX = oBot.x -1;
+        }
+        destination.x = newX;
+    }
+    else
+    {
+        var newY = oBot.y +1;
+        if( oBot.y > destinationCoords.y )
+        {
+            newY = oBot.y -1;
+        }
+        destination.y = newY;
+    }
+    var destinationIndex = coordToIndex( state, destination );
+    moves.push( {from: botIndex, to: destinationIndex} );
+}
+    aBots.forEach(
+            function ( oBot )
+            {
+                var botIndex = oBot.index;
                 var adjacent = getAdjacentIndices( state, botIndex );
-                var destination = getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, botIndex, adjacent )
+                var destination = getMove( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, botIndex, adjacent )
                 if( !collisionIndex[ destination ] )  // space is NOT already occupied by moving bot or bot unable to move
                 {  // todo - this elsewhere
                     collisionIndex[ destination ] = botIndex;  // report that you are moving to a destination is free of friendly bots,
                     delete collisionIndex[ botIndex ];  // report that you you are occupying your current position so you don't get run over
                     moves.push( {from: botIndex, to: destination} );  // move
                 }
-            } );
+            }
+    );
 
     return moves;
 
@@ -145,7 +243,7 @@ function getMoves( state, player )
         this.x = this.coords.x;
         this.y = this.coords.y;
         this.name = (this.name || "x" + this.x + "y" + this.y);
-        this.moveCoords = null;
+        this.destinationCoords = null;
         this.moveIndex = null;
         this.nearestFuel = null;
         this.fuelDistances = this.fuelDistances || getFuelDistances( this );
@@ -154,6 +252,24 @@ function getMoves( state, player )
        // this.nearestFriend;
        // this.nearestEnemy;
         this.strategy = "unassigned";
+        return this;
+    }
+
+
+    function Fuel( fuelIndex )
+    {
+        this.index = fuelIndex;
+        this.coords = this.coords || indexToCoord( state, this.index );
+        this.x = this.coords.x;
+        this.y = this.coords.y;
+        this.name = (this.name || "x" + this.x + "y" + this.y);
+        this.nearestBot = null;
+        this.nearestFriendlyBot = null;
+        this.botDistances = this.botDistances || getBotDistances( this );
+        this.allBotDistances = this.botDistances.all;
+        this.friendlyBotDistances = this.botDistances.friendly;
+        this.ownSpawnDistance = this.ownSpawnDistance || getDistance( this.coords, spawnCoord );
+        this.enemySpawnDistance = this.enemySpawnDistance || getDistance( this.coords, enemySpawnCoord );
         return this;
     }
 
@@ -180,6 +296,51 @@ function getMoves( state, player )
             oDistances[ distance ] = energyCoords;
         }
         return aDistances;
+    }
+
+    function getBotDistances( oFuel )
+    {
+        var aBotDistances = [];
+        var oBotDistances = [];
+        var aFriendlyBotDistances = [];
+        var oFriendlyBotDistances = [];
+        var aAllBots = playerIndices.concat(enemyIndices);
+        var aFriendlyBots = aBots;
+        var iClosestDistance = 1000000;
+        var iClosestFriendlyDistance = 1000000;
+        for( var f = 0; aFriendlyBots.length > f; f++ )
+        {
+            var oBot = aFriendlyBots[ f ];
+            var botCoords = oBot.coords;
+            var distance = getDistance( oFuel.coords, botCoords );
+            if( distance < iClosestFriendlyDistance )
+            {
+                oFuel.nearestFriendlyBot = oBot;
+            }
+            aFriendlyBotDistances.push( distance );
+            if( !oFriendlyBotDistances[ distance ] )
+            {
+                oFriendlyBotDistances[ distance ];
+            }
+            oFriendlyBotDistances[ distance ] = oBot;
+        }
+
+        for( var i = 0; aAllBots.length > i; i++ )
+        {
+            botCoords = aAllBots[ i ];
+            distance = getDistance( oFuel.coords, botCoords );
+            if( distance < iClosestDistance )
+            {
+                oFuel.nearestBot = botCoords;
+            }
+            aBotDistances.push( distance );
+            if( !oBotDistances[ distance ] )
+            {
+                oBotDistances[ distance ];
+            }
+            oBotDistances[ distance ] = botCoords;
+        }
+        return {all: aBotDistances, friendly:aFriendlyBotDistances};
     }
 }
 
@@ -227,20 +388,20 @@ function mainLoop()
         gangUpAndAttack();
     }
     else
-    {r
+    {
        // Defensive
     }
 }
 
 
-function getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, playerIndex, adjacent )
+function getMove( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, enemyIndices, playerIndex, adjacent )
 {
     var to = playerIndex;
     var botCoords = indexToCoord( state, playerIndex );
     var aDistancesToAllEnergy = getDistances( botCoords );
     //console.log( "bot" + playerIndex + "\naDistancesToAllEngery: " + aDistancesToAllEnergy )
     var minIndex = indexOfMin( aDistancesToAllEnergy );
-    var nearestEnergy = getAllIndices( state.grid, '*' )[minIndex ];
+    var nearestEnergy = getAllIndices( state.grid, '*' )[ minIndex ];
     // console.log( "bot" + playerIndex + " nearest energy is: " + minIndex + " " + indexToCoord( state, nearestEnergy ) );
     if( nearestEnergy )
     {
@@ -280,7 +441,6 @@ function getTo( state, energy, spawn, enemyenergy, enemySpawn, playerIndices, en
             return to = coordToIndex( state, { x: botCoords.x - 1, y: botCoords.y} );
         }
     }
-    console.log( "bot" + playerIndex + " moving random" );
     return to;
 
     function getDistances( botCoords )
