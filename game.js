@@ -33,10 +33,37 @@ exports.create = function(rows, cols, maxTurns) {
     energy:1,
     spawn:coordToIndex(gameState, {x:cols-2,y:rows-2})
   };
-  gameState.grid = makeEmptyGrid(gameState.rows, gameState.cols);
+
+  gameState.grid = initializeGrid(gameState.rows, gameState.cols);
+  //gameState.grid = makeEmptyGrid(gameState.rows, gameState.cols);
 
   return gameState;
 };
+
+function initializeGrid( iRows, iCols )
+{
+   var sSeedData = { start:{x:4, y:7 }, data: '****' };
+   var sEmptyGrid = makeEmptyGrid( iRows, iCols );
+// console.log(sEmptyGrid);
+// console.log( "\n\n" );
+   var aRows = sEmptyGrid.match( new RegExp( '.{1,' + iRows + '}', 'g' ) );
+// console.log( aRows[ sSeedData.start.y ] );
+   aRows[ sSeedData.start.y ] = spliceString( aRows[ sSeedData.start.y ], sSeedData.start.x, sSeedData.start.x + sSeedData.data.length, sSeedData.data );
+// console.log( "\n\n\n\n" );
+// console.log( aRows[ sSeedData.start.y ] );
+// console.log( "\n\n" );
+   var populatedGrid = aRows.join('');
+// console.log( populatedGrid );
+   return populatedGrid;
+}
+
+function spliceString( sOrigionalString, iStart, iEnd, sInsertionText )
+{
+    var splicedString = sOrigionalString.split( '' );
+    splicedString.splice( iStart, iEnd, sInsertionText );
+    splicedString = splicedString.join( '' );
+    return splicedString;
+}
 
 exports.doTurn = function(state, p1Moves, p2Moves, testing) {
   var p1Valid = validMoves(p1Moves);
@@ -336,5 +363,5 @@ function getMirroredIndex(state, index) {
 }
 
 function copyObj(object) {
-  return JSON.parse(JSON.stringify(object)); 
+  return JSON.parse(JSON.stringify(object));
 }
